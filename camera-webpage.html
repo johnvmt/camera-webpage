@@ -1,0 +1,257 @@
+<template>
+	<div style="height: 100%; width: 100%; background-size: 100% 100%;"></div>
+</template>
+
+<!--ThreeJS-->
+<script src="js/three.min.js"></script>
+<script src="js/CSS3DRenderer.js"></script>
+
+<script>
+	(function(window, document) {
+		function createGlRenderer(width, height) {
+			var glRenderer = new THREE.WebGLRenderer({alpha:true});
+			glRenderer.setPixelRatio(window.devicePixelRatio);
+			glRenderer.setSize(width, height);
+			glRenderer.domElement.style.position = 'absolute';
+			glRenderer.domElement.style.zIndex = 1;
+			glRenderer.domElement.style.top = 0;
+			return glRenderer;
+		}
+
+		function createCssRenderer(width, height) {
+			var cssRenderer = new THREE.CSS3DRenderer();
+			cssRenderer.setSize(width, height);
+			cssRenderer.domElement.style.position = 'absolute';
+			//glRenderer.domElement.style.zIndex = 0;
+			cssRenderer.domElement.style.top = 0;
+			return cssRenderer;
+		}
+
+		function createPlane(w, h, position, rotation) {
+			var material = new THREE.MeshBasicMaterial({
+				color: 0x000000,
+				opacity: 0.0,
+				side: THREE.DoubleSide
+			});
+			var geometry = new THREE.PlaneBufferGeometry(w, h);
+			var mesh = new THREE.Mesh(geometry, material);
+			mesh.position.x = position.x;
+			mesh.position.y = position.y;
+			mesh.position.z = position.z;
+			mesh.rotation.x = rotation.x;
+			mesh.rotation.y = rotation.y;
+			mesh.rotation.z = rotation.z;
+			return mesh;
+		}
+
+		function createCssObject(w, h, position, rotation, url) {
+			var elem = document.createElement('iframe');
+			elem.innerHTML = '';
+			elem.style.width = w + 'px';
+			elem.style.height = h + 'px';
+			elem.style.display = 'block';
+			elem.src = url;
+
+			var cssObject = new THREE.CSS3DObject(elem);
+
+			cssObject.position.x = position.x;
+			cssObject.position.y = position.y;
+			cssObject.position.z = position.z;
+			cssObject.rotation.x = rotation.x;
+			cssObject.rotation.y = rotation.y;
+			cssObject.rotation.z = rotation.z;
+			return cssObject;
+		}
+
+		function create3dPage(w, h, position, rotation, url, glScene, cssScene) {
+			var plane = createPlane(
+					w, h,
+					position,
+					rotation);
+			glScene.add(plane);
+			var cssObject = createCssObject(
+					w, h,
+					position,
+					rotation,
+					url);
+			cssScene.add(cssObject);
+			return cssObject;
+		}
+
+		// this html page
+		var componentDoc =  (document._currentScript || document.currentScript).ownerDocument;
+		var componentDir = componentDoc.baseURI.substring(0, componentDoc.baseURI.lastIndexOf('/'));
+
+		// Gets content from <template>
+		var template = componentDoc.querySelector('template').content;
+
+		// Creates an object based in the HTML Element prototype
+		var ElementProto = Object.create(HTMLElement.prototype);
+
+		// Fires when an instance of the element is created
+		ElementProto.createdCallback = function() {
+			var self = this;
+
+			// Creates the shadow root
+			self.shadowRoot = self.createShadowRoot();
+
+			// Adds a template clone into shadow root
+			self.shadowRoot.appendChild(document.importNode(template, true));
+
+			// get and merge params from camera-webpage element
+			var elementAttributeDefaults = {
+				objectwidth: 1920,
+				objectheight: 1080,
+				objectpositionx: 0,
+				objectpositiony: 0,
+				objectpositionz: 0,
+				objectrotationx: 0,
+				objectrotationy: 0,
+				objectrotationz: 0,
+				objectopacity: 1,
+				camerafov: 45,
+				cameranear: 1,
+				camerafar: 10000,
+				camerapositionx: 0,
+				camerapositiony: 0,
+				camerapositionz: 0,
+				camerarotationx: 0,
+				camerarotationy: 0,
+				camerarotationz: 0
+			};
+
+			self.elementAttributes = objectExtend(elementAttributeDefaults, self.getAttributes());
+
+			var threejsContainer = self.shadowRoot.querySelector('div');
+
+			var camera, page, glScene, cssScene, glRenderer, cssRenderer;
+
+			// set background color and/or image
+			if(typeof self.elementAttributes['background-image'] === "string")
+				threejsContainer.style['background-image'] = 'url("' + self.elementAttributes['background-image'] + '")';
+			if(typeof self.elementAttributes['background-color'] === "string")
+				threejsContainer.style['background-color'] = self.elementAttributes['background-color'];
+
+			// Fires when element is in DOM and set to correct size
+			// jQuery version: $(self.shadowRoot).ready(function() { }
+			window.addEventListener('load', function() {
+
+				var containerWidth = threejsContainer.offsetWidth;
+				var containerHeight = threejsContainer.offsetHeight;
+
+				camera = new THREE.PerspectiveCamera(
+						self.elementAttributes.camerafov,
+						containerWidth / containerHeight,
+						self.elementAttributes.cameranear,
+						self.elementAttributes.camerafar);
+				camera.position.set(self.elementAttributes.camerapositionx, self.elementAttributes.camerapositiony, self.elementAttributes.camerapositionz);
+
+				glRenderer = createGlRenderer(containerWidth, containerHeight);
+				cssRenderer = createCssRenderer(containerWidth, containerHeight);
+				cssRenderer.domElement.appendChild(glRenderer.domElement);
+				threejsContainer.appendChild(cssRenderer.domElement);
+
+				glScene = new THREE.Scene();
+				cssScene = new THREE.Scene();
+
+				page = create3dPage(
+						self.elementAttributes.objectwidth, self.elementAttributes.objectheight,
+						new THREE.Vector3(self.elementAttributes.objectpositionx, self.elementAttributes.objectpositiony, self.elementAttributes.objectpositionz),
+						new THREE.Vector3(degreesToRadians(self.elementAttributes.objectrotationx), degreesToRadians(self.elementAttributes.objectrotationy), degreesToRadians(self.elementAttributes.objectrotationz)),
+						self.elementAttributes.src, glScene, cssScene);
+				animate();
+
+				window.onresize = onWindowResize;
+
+			}, false);
+
+			function onWindowResize() {
+				console.log("RESIZE");
+				camera.aspect = threejsContainer.offsetWidth / threejsContainer.offsetHeight;
+				camera.updateProjectionMatrix();
+				glRenderer.setSize(threejsContainer.offsetWidth, threejsContainer.offsetHeight);
+				cssRenderer.setSize(threejsContainer.offsetWidth, threejsContainer.offsetHeight);
+			}
+
+			function animate() {
+				render();
+				requestAnimationFrame(animate);
+			}
+
+			function render() {
+
+				if(self.elementAttributes.src != page.element.src) {
+					// TODO change so relative links not reloaded twice
+					page.element.src = self.elementAttributes.src;
+					self.elementAttributes.src = page.element.src;
+				}
+
+				page.element.style.width = self.elementAttributes.objectwidth + 'px';
+				page.element.style.height = self.elementAttributes.objectheight + 'px';
+				page.element.style.opacity = self.elementAttributes.objectopacity;
+
+				page.position.x = self.elementAttributes.objectpositionx;
+				page.position.y = self.elementAttributes.objectpositiony;
+				page.position.z = self.elementAttributes.objectpositionz;
+
+				page.rotation.x = degreesToRadians(self.elementAttributes.objectrotationx);
+				page.rotation.y = degreesToRadians(self.elementAttributes.objectrotationy);
+				page.rotation.z = degreesToRadians(self.elementAttributes.objectrotationz);
+
+				camera.position.x = self.elementAttributes.camerapositionx;
+				camera.position.y = self.elementAttributes.camerapositiony;
+				camera.position.z = self.elementAttributes.camerapositionz;
+
+				camera.rotation.x = degreesToRadians(self.elementAttributes.camerarotationx);
+				camera.rotation.y = degreesToRadians(self.elementAttributes.camerarotationy);
+				camera.rotation.z = degreesToRadians(self.elementAttributes.camerarotationz);
+
+				glRenderer.render(glScene, camera);
+				cssRenderer.render(cssScene, camera);
+			}
+		};
+
+		// Fires when an attribute was added, removed, or updated
+		ElementProto.attributeChangedCallback = function(attr, oldVal, newVal) {
+			this.elementAttributes[attr] = newVal;
+		};
+
+		ElementProto.getAttributes = function() {
+			var attributes = {};
+			for(var ctr = 0; ctr < this.attributes.length; ctr++) {
+				attributes[this.attributes[ctr].nodeName] = this.attributes[ctr].nodeValue;
+			}
+			return attributes;
+		};
+
+		function objectExtend() {
+			var merged = {};
+			objectForEach(arguments, function(argument) {
+				for (var attrname in argument) {
+					if(argument.hasOwnProperty(attrname))
+						merged[attrname] = argument[attrname];
+				}
+			});
+			return merged;
+
+			function objectForEach(object, callback) {
+				// run function on each property (child) of object
+				var property;
+				for(property in object) { // pull keys before looping through?
+					if (object.hasOwnProperty(property))
+						callback(object[property], property, object);
+				}
+			}
+		}
+
+		function degreesToRadians(degrees) {
+			return degrees * (Math.PI / 180);
+		}
+
+
+
+		window.CameraWebpage = document.registerElement('camera-webpage', {
+			prototype: ElementProto
+		});
+	})(window, document);
+</script>
